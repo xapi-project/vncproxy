@@ -155,7 +155,7 @@ let proxy (a_ic, a_oc) (b_ic, b_oc) =
 
 let connect c x =
   let rpc = make c.Common.uri in
-  lwt session_id = Session.login_with_password rpc c.Common.username c.Common.password "1.0" in
+  lwt session_id = Session.login_with_password rpc c.Common.username c.Common.password "1.0" "vncproxy" in
   try_lwt
     lwt console = find_console rpc session_id x in
     lwt remote = connect_to_console session_id console in
