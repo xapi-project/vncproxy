@@ -7,8 +7,9 @@ License:     LGPL-2.1 with OCaml linking exception
 Plugins:     DevFiles (0.4)
 
 Executable vncproxy
+  CompiledObject: best
   Path:       src
   BuildTools: ocamlbuild
   MainIs:     vncproxy.ml
-  BuildDepends: xen-api-client, xen-api-client.lwt, lwt, cmdliner
+  BuildDepends: xen-api-client, xen-api-client.lwt, lwt, lwt.ppx, cmdliner
 
