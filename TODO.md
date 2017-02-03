@@ -1,2 +1,2 @@
-Support reading defaults from a config file (pool URL, username, password)
-
+- Support reading defaults from a config file (pool URL, username, password)
+- Add version constraints on opam and oasis files (important for xen-api-client)
