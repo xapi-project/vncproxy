@@ -1,5 +1,5 @@
 # OASIS_START
-# DO NOT EDIT (digest: 02790787001ef4b487f0368a305c720e)
+# DO NOT EDIT (digest: 1100faeaebdd77e19386eb0d2346e36b)
 # Ignore VCS directories, you can use the same kind of rule outside
 # OASIS_START/STOP if you want to exclude directories that contains
 # useless stuff for the build process
@@ -15,11 +15,11 @@ true: annot, bin_annot
 "_darcs": -traverse
 "_darcs": not_hygienic
 # Executable vncproxy
-"src/vncproxy.byte": pkg_cmdliner
-"src/vncproxy.byte": pkg_lwt
-"src/vncproxy.byte": pkg_lwt.ppx
-"src/vncproxy.byte": pkg_xen-api-client
-"src/vncproxy.byte": pkg_xen-api-client.lwt
+<src/vncproxy.{native,byte}>: pkg_cmdliner
+<src/vncproxy.{native,byte}>: pkg_lwt
+<src/vncproxy.{native,byte}>: pkg_lwt.ppx
+<src/vncproxy.{native,byte}>: pkg_xen-api-client
+<src/vncproxy.{native,byte}>: pkg_xen-api-client.lwt
 <src/*.ml{,i,y}>: pkg_cmdliner
 <src/*.ml{,i,y}>: pkg_lwt
 <src/*.ml{,i,y}>: pkg_lwt.ppx
