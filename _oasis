@@ -1,0 +1,14 @@
+OASISFormat: 0.4
+Name:        vncproxy
+Version:     0.0.2
+Synopsis:    connect to remote XenServer VM consoles
+Authors:     David Scott, Marcello Seri <marcello.seri@citrix.com>
+License:     LGPL-2.1 with OCaml linking exception
+Plugins:     DevFiles (0.4)
+
+Executable vncproxy
+  Path:       src
+  BuildTools: ocamlbuild
+  MainIs:     vncproxy.ml
+  BuildDepends: xen-api-client, xen-api-client.lwt, lwt, cmdliner
+
