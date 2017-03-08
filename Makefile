@@ -1,20 +1,41 @@
-BINDIR?=/tmp/
-DESTDIR?=/
+# OASIS_START
+# DO NOT EDIT (digest: a3c674b4239234cbbe53afe090018954)
 
-.PHONY: build install uninstall clean
+SETUP = ocaml setup.ml
 
-build: dist/setup
-	obuild build
+build: setup.data
+	$(SETUP) -build $(BUILDFLAGS)
 
-dist/setup:
-	obuild configure
+doc: setup.data build
+	$(SETUP) -doc $(DOCFLAGS)
 
-install:
-	install -m 0755 dist/build/vncproxy/vncproxy ${DESTDIR}${BINDIR}
+test: setup.data build
+	$(SETUP) -test $(TESTFLAGS)
 
-uninstall:
-	rm -f ${BINDIR}/vncproxy
+all:
+	$(SETUP) -all $(ALLFLAGS)
+
+install: setup.data
+	$(SETUP) -install $(INSTALLFLAGS)
+
+uninstall: setup.data
+	$(SETUP) -uninstall $(UNINSTALLFLAGS)
+
+reinstall: setup.data
+	$(SETUP) -reinstall $(REINSTALLFLAGS)
 
 clean:
-	obuild clean
+	$(SETUP) -clean $(CLEANFLAGS)
 
+distclean:
+	$(SETUP) -distclean $(DISTCLEANFLAGS)
+
+setup.data:
+	$(SETUP) -configure $(CONFIGUREFLAGS)
+
+configure:
+	$(SETUP) -configure $(CONFIGUREFLAGS)
+
+.PHONY: build doc test all install uninstall reinstall clean distclean configure
+
+# OASIS_STOP
