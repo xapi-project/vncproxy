@@ -1,4 +1,0 @@
-S src
-B _build
-B _build/src
-PKG lwt cmdliner xen-api-client

@@ -63,43 +63,41 @@ let exn_to_string = function
 
 let find_console rpc session_id x =
   (* Treat 'x' first as a uuid and then as a name_label *)
-  let%lwt vm =
-    try%lwt
-      VM.get_by_uuid rpc session_id x
-    with _ ->
-      let%lwt possibilities = VM.get_by_name_label rpc session_id x in
-      match possibilities with
-      | [ exactly_one ] -> return exactly_one
-      | [] ->
-        Printf.fprintf stderr "Failed to find VM %s\n%!" x;
-        fail (Failure (Printf.sprintf "Failed to find VM %s" x))
-      | x :: too_many ->
-        let%lwt uuid = VM.get_uuid rpc session_id x in
-        Printf.fprintf stderr "More than one VM found with this name.\n%!";
-        Printf.fprintf stderr "Choosing VM with uuid %s.\n%!" uuid;
-        return x in
+  Lwt.catch
+    (fun () -> VM.get_by_uuid ~rpc ~session_id ~uuid:x )
+    (fun  _ ->
+       VM.get_by_name_label ~rpc ~session_id ~label:x >>= function
+       | [ exactly_one ] -> return exactly_one
+       | [] ->
+         Printf.fprintf stderr "Failed to find VM %s\n%!" x;
+         fail (Failure (Printf.sprintf "Failed to find VM %s" x))
+       | y :: _ ->
+         VM.get_uuid ~rpc ~session_id ~self:y >>= fun uuid ->
+         Printf.fprintf stderr "More than one VM found with this name.\n%!";
+         Printf.fprintf stderr "Choosing VM with uuid %s.\n%!" uuid;
+         return y
+
+    ) >>= fun vm ->
   (* Check that the VM is running *)
-  let%lwt power_state = VM.get_power_state rpc session_id vm in
-  let%lwt () =
-    if power_state <> `Running then begin
+  VM.get_power_state ~rpc ~session_id ~self:vm >>= fun power_state ->
+  (if power_state <> `Running then begin
       Printf.fprintf stderr "The VM %s is not running.\n%!" vm;
       fail (Failure (Printf.sprintf "The VM is not running"))
-    end else return () in
+    end else return_unit) >>= fun () ->
+
   (* Find a console with the RFB protocol *)
-  let%lwt console =
-    let%lwt all = VM.get_consoles rpc session_id vm in
-    let%lwt all = Lwt_list.map_s (fun c -> Console.get_record rpc session_id c) all in
-    match List.filter (fun c -> c.API.console_protocol = `rfb) all with
-    | [ exactly_one ] -> return exactly_one
-    | [] ->
-      Printf.fprintf stderr "The VM is exposing no VNC consoles.\n%!";
-      fail (Failure (Printf.sprintf "The VM is exposing no VNC consoles"))
-    | x :: too_many ->
-      Printf.fprintf stderr "The VM is exposing multiple VNC consoles.\n";
-      Printf.fprintf stderr "I will choose one for you.\n%!";
-      return x
-  in
-  return console
+  VM.get_consoles ~rpc ~session_id ~self:vm >>=
+  Lwt_list.map_s (fun c -> Console.get_record ~rpc ~session_id ~self:c) >>= fun all ->
+  match List.filter (fun c -> c.API.console_protocol = `rfb) all with
+  | [ exactly_one ] -> return exactly_one
+  | [] ->
+    Printf.fprintf stderr "The VM is exposing no VNC consoles.\n%!";
+    fail (Failure (Printf.sprintf "The VM is exposing no VNC consoles"))
+  | y :: _ ->
+    Printf.fprintf stderr "The VM is exposing multiple VNC consoles.\n";
+    Printf.fprintf stderr "I will choose one for you.\n%!";
+    return y
+    >>= fun console -> return console
 
 let bind_local_port () =
   let sockaddr = Unix.ADDR_INET(Unix.inet_addr_of_string "127.0.0.1", 0) in
@@ -121,67 +119,75 @@ let bind_local_port () =
 
 let connect_to_console session_id console =
   let uri = Uri.of_string console.API.console_location in
-  match%lwt Xen_api_lwt_unix.Lwt_unix_IO.open_connection uri with
+  Xen_api_lwt_unix.Lwt_unix_IO.open_connection uri >>= function
   | Ok ((_, ic), (_, oc)) ->
-    let%lwt () = Lwt_io.write oc (Printf.sprintf "CONNECT %s?%s HTTP/1.0\r\n" (Uri.path uri) (Uri.(encoded_of_query (query uri)))) in
-    let%lwt () = Lwt_io.write oc (Printf.sprintf "Cookie: session_id=%s\r\n" (API.Ref.string_of session_id)) in
-    let%lwt () = Lwt_io.write oc "\r\n" in
-    let%lwt () = Lwt_io.flush oc in
-    let%lwt status = Lwt_io.read_line ic in
+    Lwt_io.write oc (Printf.sprintf "CONNECT %s?%s HTTP/1.0\r\n" (Uri.path uri) (Uri.(encoded_of_query (query uri)))) >>= fun () ->
+    Lwt_io.write oc (Printf.sprintf "Cookie: session_id=%s\r\n" (API.Ref.string_of session_id)) >>= fun () ->
+    Lwt_io.write oc "\r\n" >>= fun () ->
+    Lwt_io.flush oc >>= fun ()->
+    Lwt_io.read_line ic >>= fun status ->
     Printf.fprintf stderr "%s\n%!" status;
-    let rest = ref [] in
-    let finished = ref false in
-    let%lwt () = while%lwt not !finished do
-        let%lwt line = Lwt_io.read_line ic in
+    let rec loop finished =
+      if finished then
+        Lwt.return_unit
+      else begin
+        Lwt_io.read_line ic >>= fun line ->
         Printf.fprintf stderr "%s\n%!" line;
-        if line = ""
-        then finished := true
-        else rest := line :: !rest;
-        return ()
-      done in
-    return (ic, oc)
+        loop (line = "")
+      end
+    in
+    loop false >>= fun () -> return (ic, oc)
   | Error e -> fail e
 
 let proxy (a_ic, a_oc) (b_ic, b_oc) =
   let copy x y =
-    try%lwt
-      while%lwt true do
-        let%lwt c = Lwt_io.read_char x in
-        Lwt_io.write_char y c
-      done
-    with End_of_file -> return () in
+    Lwt.catch
+      (fun () ->
+         let rec loop () =
+           Lwt_io.read_char x >>= fun c ->
+           Lwt_io.write_char y c >>=
+           loop
+         in
+         loop ()
+      )
+      (function | End_of_file -> return_unit | e -> fail e)
+  in
   let _ = copy a_ic b_oc in
   let _ = copy b_ic a_oc in
   ()
 
 let connect c x =
   let rpc = make c.Common.uri in
-  let%lwt session_id = Session.login_with_password rpc c.Common.username c.Common.password "1.0" "vncproxy" in
-  let intercept_exit vncviewer = match%lwt vncviewer with
-    | Unix.WEXITED 0 -> return ()
+  let intercept_exit vncviewer = vncviewer >>= function
+    | Unix.WEXITED 0 -> return_unit
     | Unix.WEXITED n ->
       Printf.fprintf stderr "vncviewer non-zero exit code: %d" n;
-      return ()
+      return_unit
     | Unix.WSIGNALED n ->
       Printf.fprintf stderr "vncviewer signalled with %d" n;
-      return ()
+      return_unit
     | Unix.WSTOPPED n ->
       Printf.fprintf stderr "vncviewer stopped with %d" n;
-      return ()
+      return_unit
   in
-  begin
-    try%lwt
-      let%lwt console = find_console rpc session_id x in
-      let%lwt remote = connect_to_console session_id console in
-      let listening_sock, port = bind_local_port () in
-      let vncviewer = Lwt_unix.system (Printf.sprintf "vncviewer localhost:%d" port) in
-      let connected_sock, _ = Unix.accept listening_sock in
-      let ic = Lwt_io.of_unix_fd ~mode:Lwt_io.input connected_sock in
-      let oc = Lwt_io.of_unix_fd ~mode:Lwt_io.output connected_sock in
-      proxy (ic, oc) remote;
-      intercept_exit vncviewer
-    with _ -> return_unit
-  end [%finally Session.logout rpc session_id]
+  Session.login_with_password ~rpc ~uname:c.Common.username ~pwd:c.Common.password ~version:"1.0" ~originator:"vncproxy" >>= fun session_id ->
+  Lwt.finalize
+    (fun () ->
+       Lwt.catch
+         (fun () ->
+            find_console rpc session_id x >>= fun console ->
+            connect_to_console session_id console >>= fun remote ->
+            let listening_sock, port = bind_local_port () in
+            let vncviewer = Lwt_unix.system (Printf.sprintf "vncviewer localhost:%d" port) in
+            let connected_sock, _ = Unix.accept listening_sock in
+            let ic = Lwt_io.of_unix_fd ~mode:Lwt_io.input connected_sock in
+            let oc = Lwt_io.of_unix_fd ~mode:Lwt_io.output connected_sock in
+            proxy (ic, oc) remote;
+            intercept_exit vncviewer
+         )
+         (fun _ -> return_unit)
+    )
+    (fun () -> Session.logout ~rpc ~session_id)
 
 let connect common = function
   | None ->
