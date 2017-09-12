@@ -92,14 +92,15 @@ let find_console rpc session_id x =
   Lwt_list.filter_map_s (fun c ->
       Lwt.catch
         (fun () ->
-           Console.get_record ~rpc ~session_id ~self:c
-           >>= fun c_record ->
-           if c_record.API.console_protocol = `rfb
-           then Lwt.return_some c_record
+           Console.get_protocol ~rpc ~session_id ~self:c
+           >>= fun proto ->
+           if proto = `rfb
+           then Console.get_location ~rpc ~session_id ~self:c 
+             >>= Lwt.return_some
            else Lwt.return_none)
         (fun e ->
-          (* Lwt_io.eprintlf "warning: %s" (Printexc.to_string e) >>= fun () -> *)
-          Lwt.return_none)
+           (* Lwt_io.eprintlf "warning: %s" (Printexc.to_string e) >>= fun () -> *)
+           Lwt.return_none)
     ) cs >>= fun all -> 
   match all with
   | [ exactly_one ] -> Lwt.return exactly_one
@@ -110,9 +111,6 @@ let find_console rpc session_id x =
     Lwt_io.eprintlf "The VM is exposing multiple VNC consoles" >>= fun () ->
     Lwt_io.eprintlf "I will choose one for you" >>= fun () ->
     Lwt.return y
-    >>= fun console ->
-    Lwt_io.eprintlf "Found console %s" console.API.console_uuid >>= fun () ->
-    Lwt.return console
 
 
 let bind_local_port () =
@@ -128,9 +126,9 @@ let bind_local_port () =
     Lwt.return (sock, port)
   | _ -> assert false
 
-let connect_to_console session_id console =
-  Lwt_io.eprintlf "Trying to connect to console %s" console.API.console_uuid >>= fun () ->
-  let uri = Uri.of_string console.API.console_location in
+let connect_to_console session_id console_location =
+  Lwt_io.eprintlf "Trying to connect to console" >>= fun () ->
+  let uri = Uri.of_string console_location in
   Xen_api_lwt_unix.Lwt_unix_IO.open_connection uri >>= function
   | Ok ((_, ic), (_, oc)) ->
     Lwt_io.write oc (Printf.sprintf "CONNECT %s?%s HTTP/1.0\r\n" (Uri.path uri) (Uri.(encoded_of_query (query uri)))) >>= fun () ->
@@ -189,14 +187,13 @@ let connect c x =
     (fun () ->
        Lwt.catch
          (fun () ->
-            find_console rpc session_id x >>= fun console ->
-            connect_to_console session_id console >>= fun remote ->
+            find_console rpc session_id x >>= fun console_location ->
+            connect_to_console session_id console_location >>= fun remote ->
             bind_local_port () >>= fun (listening_sock, port) ->
             let vncviewer = Lwt_unix.system (Printf.sprintf "vncviewer localhost:%d" port) in
             let connected_sock, _ = Unix.accept listening_sock in
             let ic = Lwt_io.of_unix_fd ~mode:Lwt_io.input connected_sock in
             let oc = Lwt_io.of_unix_fd ~mode:Lwt_io.output connected_sock in
-            Lwt_io.eprintlf "Ready to proxy" >>= fun () ->
             ignore(proxy (ic, oc) remote);
             intercept_exit vncviewer)
          (fun _ -> Lwt.return_unit)
