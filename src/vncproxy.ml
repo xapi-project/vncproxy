@@ -52,7 +52,6 @@ module Common = struct
     { debug; uri; username; password }
 end
 
-open Lwt.Infix
 open Xen_api
 open Xen_api_lwt_unix
 
@@ -98,10 +97,8 @@ let find_console rpc session_id x =
            then Console.get_location ~rpc ~session_id ~self:c 
              >>= Lwt.return_some
            else Lwt.return_none)
-        (fun e ->
-           (* Lwt_io.eprintlf "warning: %s" (Printexc.to_string e) >>= fun () -> *)
-           Lwt.return_none)
-    ) cs >>= fun all -> 
+        (fun _ -> Lwt.return_none)
+    ) cs >>= fun all ->
   match all with
   | [ exactly_one ] -> Lwt.return exactly_one
   | [] ->
