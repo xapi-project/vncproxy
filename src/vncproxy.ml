@@ -82,7 +82,7 @@ let find_console rpc session_id x =
   VM.get_power_state ~rpc ~session_id ~self:vm
   >>= fun power_state ->
   (if power_state <> `Running then begin
-      Lwt_io.eprintlf "The VM %s is not running" vm >>= fun () ->
+      Lwt_io.eprintlf "The VM %s is not running" (API.Ref.string_of vm) >>= fun () ->
       Lwt.fail_with "The VM is not running"
     end else Lwt.return_unit) >>= fun () ->
 
@@ -179,7 +179,7 @@ let connect c x =
   in
   Session.login_with_password ~rpc ~uname:c.Common.username ~pwd:c.Common.password ~version:"1.0" ~originator:"vncproxy"
   >>= fun session_id ->
-  Lwt_io.eprintlf "Got session %s" session_id >>= fun () ->
+  Lwt_io.eprintlf "Got session %s" (API.Ref.string_of session_id) >>= fun () ->
   Lwt.finalize
     (fun () ->
        Lwt.catch
