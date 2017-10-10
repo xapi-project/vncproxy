@@ -13,5 +13,5 @@ depends: [
   "jbuilder" {build}
   "cmdliner"
   "lwt"
-  "xen-api-client" {>= "0.9.14"}
+  "xen-api-client-lwt"
 ]
