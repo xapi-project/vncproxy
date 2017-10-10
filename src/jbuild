@@ -3,6 +3,6 @@
 (executable(
     (name vncproxy)
     (public_name vncproxy)
-    (libraries (xen-api-client xen-api-client.lwt lwt cmdliner))
+    (libraries (xen-api-client xen-api-client-lwt lwt cmdliner))
   )
 )
