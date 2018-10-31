@@ -14,7 +14,7 @@ script:
   - cp vncproxy.opam opam && bash -ex .travis-opam.sh
 env:
   global:
-    - OCAML_VERSION=4.04
+    - OCAML_VERSION=4.06.1
     - PACKAGE=vncproxy
     - TESTS=false
   matrix:
